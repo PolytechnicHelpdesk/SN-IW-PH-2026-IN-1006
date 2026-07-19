@@ -7425,6 +7425,27 @@ function webViewerInitialized() {
       return Math.max(PINCH_MIN_SCALE, Math.min(PINCH_MAX_SCALE, val));
     }
 
+    // While mid-gesture is in fast (CSS-only) zoom mode, the page looks
+    // like a stretched image instead of true PDF quality. To keep that
+    // window short, sneak in one real, sharp re-render every ~250ms
+    // during a sustained pinch -- rare enough to stay smooth, frequent
+    // enough that it doesn't look blurry for more than an instant.
+    var QUALITY_REFRESH_INTERVAL = 250;
+    var lastQualityRefresh = 0;
+
+    function applyScale(newScale) {
+      var pdfViewer = PDFViewerApplication.pdfViewer;
+      var now = Date.now();
+      if (now - lastQualityRefresh > QUALITY_REFRESH_INTERVAL) {
+        lastQualityRefresh = now;
+        PDFJS.useOnlyCssZoom = false;
+        pdfViewer.currentScale = newScale;
+        PDFJS.useOnlyCssZoom = true;
+      } else {
+        pdfViewer.currentScale = newScale;
+      }
+    }
+
     if (supportsGestureEvents) {
       // --- Safari desktop trackpad + iOS Safari touchscreen ---
       var gestureStartScale = 1;
@@ -7432,13 +7453,14 @@ function webViewerInitialized() {
       container.addEventListener('gesturestart', function (e) {
         e.preventDefault();
         beginFastZoom();
+        lastQualityRefresh = Date.now();
         gestureStartScale = PDFViewerApplication.pdfViewer.currentScale;
       });
 
       container.addEventListener('gesturechange', function (e) {
         e.preventDefault();
         var newScale = clampScale(gestureStartScale * e.scale);
-        PDFViewerApplication.pdfViewer.currentScale = newScale;
+        applyScale(newScale);
       });
 
       container.addEventListener('gestureend', function (e) {
@@ -7460,6 +7482,7 @@ function webViewerInitialized() {
         if (e.touches.length === 2) {
           e.preventDefault();
           beginFastZoom();
+          lastQualityRefresh = Date.now();
           pinchStartDistance = getDistance(e.touches);
           pinchStartScale = PDFViewerApplication.pdfViewer.currentScale;
         }
@@ -7470,7 +7493,7 @@ function webViewerInitialized() {
           e.preventDefault();
           var ratio = getDistance(e.touches) / pinchStartDistance;
           var newScale = clampScale(pinchStartScale * ratio);
-          PDFViewerApplication.pdfViewer.currentScale = newScale;
+          applyScale(newScale);
         }
       }, { passive: false });
 
