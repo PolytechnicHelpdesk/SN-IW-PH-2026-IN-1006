@@ -7384,44 +7384,74 @@ function webViewerInitialized() {
   document.getElementById('download').addEventListener('click',
     SecondaryToolbar.downloadClick.bind(SecondaryToolbar));
 
-  // --- pinch-to-zoom addon ---
+  // --- pinch-to-zoom addon (touchscreens + Safari/WebKit trackpad) ---
   (function () {
     var container = document.getElementById('viewerContainer');
-    var pinchStartDistance = null;
-    var pinchStartScale = null;
     var PINCH_MIN_SCALE = 0.25;
     var PINCH_MAX_SCALE = 5.0;
+    // Safari (desktop trackpad AND iOS touchscreen) fires proprietary
+    // gesture events for pinch. Everything else (Chrome, Firefox, Edge,
+    // Android) only fires touch events for touchscreens, and already
+    // gets trackpad-pinch-as-ctrl+wheel handled by handleMouseWheel above.
+    var supportsGestureEvents = ('ongesturestart' in window);
 
-    function getDistance(touches) {
-      var dx = touches[0].pageX - touches[1].pageX;
-      var dy = touches[0].pageY - touches[1].pageY;
-      return Math.sqrt(dx * dx + dy * dy);
+    function clampScale(val) {
+      return Math.max(PINCH_MIN_SCALE, Math.min(PINCH_MAX_SCALE, val));
     }
 
-    container.addEventListener('touchstart', function (e) {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        pinchStartDistance = getDistance(e.touches);
-        pinchStartScale = PDFViewerApplication.pdfViewer.currentScale;
-      }
-    }, { passive: false });
+    if (supportsGestureEvents) {
+      // --- Safari desktop trackpad + iOS Safari touchscreen ---
+      var gestureStartScale = 1;
 
-    container.addEventListener('touchmove', function (e) {
-      if (e.touches.length === 2 && pinchStartDistance) {
+      container.addEventListener('gesturestart', function (e) {
         e.preventDefault();
-        var ratio = getDistance(e.touches) / pinchStartDistance;
-        var newScale = pinchStartScale * ratio;
-        newScale = Math.max(PINCH_MIN_SCALE, Math.min(PINCH_MAX_SCALE, newScale));
+        gestureStartScale = PDFViewerApplication.pdfViewer.currentScale;
+      });
+
+      container.addEventListener('gesturechange', function (e) {
+        e.preventDefault();
+        var newScale = clampScale(gestureStartScale * e.scale);
         PDFViewerApplication.pdfViewer.currentScale = newScale;
-      }
-    }, { passive: false });
+      });
 
-    container.addEventListener('touchend', function (e) {
-      if (e.touches.length < 2) {
-        pinchStartDistance = null;
-        pinchStartScale = null;
+      container.addEventListener('gestureend', function (e) {
+        e.preventDefault();
+      });
+    } else {
+      // --- Chrome / Firefox / Edge / Android touchscreens ---
+      var pinchStartDistance = null;
+      var pinchStartScale = null;
+
+      function getDistance(touches) {
+        var dx = touches[0].pageX - touches[1].pageX;
+        var dy = touches[0].pageY - touches[1].pageY;
+        return Math.sqrt(dx * dx + dy * dy);
       }
-    });
+
+      container.addEventListener('touchstart', function (e) {
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          pinchStartDistance = getDistance(e.touches);
+          pinchStartScale = PDFViewerApplication.pdfViewer.currentScale;
+        }
+      }, { passive: false });
+
+      container.addEventListener('touchmove', function (e) {
+        if (e.touches.length === 2 && pinchStartDistance) {
+          e.preventDefault();
+          var ratio = getDistance(e.touches) / pinchStartDistance;
+          var newScale = clampScale(pinchStartScale * ratio);
+          PDFViewerApplication.pdfViewer.currentScale = newScale;
+        }
+      }, { passive: false });
+
+      container.addEventListener('touchend', function (e) {
+        if (e.touches.length < 2) {
+          pinchStartDistance = null;
+          pinchStartScale = null;
+        }
+      });
+    }
   })();
   // --- end pinch-to-zoom addon ---
 
