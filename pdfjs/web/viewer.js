@@ -39,6 +39,10 @@ function configure(PDFJS) {
   PDFJS.workerSrc = '../build/pdf.worker.js';
   PDFJS.cMapUrl = '../web/cmaps/';
   PDFJS.cMapPacked = true;
+  // Default (16777216 / 4096x4096) matches an old iOS Safari canvas-size
+  // safety limit. Android doesn't have that restriction, so raise it to
+  // allow sharper rendering at high zoom on high-density phone screens.
+  PDFJS.maxCanvasPixels = 67108864; // ~8192x8192
 }
 
 var mozL10n = document.mozL10n || document.webL10n;
