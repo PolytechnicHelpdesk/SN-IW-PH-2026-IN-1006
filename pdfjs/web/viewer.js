@@ -7790,9 +7790,14 @@ window.addEventListener('pagechange', function pagechange(evt) {
 }, true);
 
 function handleMouseWheel(evt) {
-  var MOUSE_WHEEL_DELTA_FACTOR = 40;
-  var ticks = (evt.type === 'DOMMouseScroll') ? -evt.detail :
+  var MOUSE_WHEEL_DELTA_FACTOR = 120;
+  var rawTicks = (evt.type === 'DOMMouseScroll') ? -evt.detail :
               evt.wheelDelta / MOUSE_WHEEL_DELTA_FACTOR;
+  // Cap the magnitude at 1 tick per event. Trackpad pinch-to-zoom fires a
+  // rapid burst of wheel-equivalent events (often with larger deltas than
+  // a single physical mouse-wheel click), which otherwise compounds the
+  // 1.1x-per-tick zoom very quickly and feels overly sensitive.
+  var ticks = rawTicks < 0 ? Math.max(rawTicks, -1) : Math.min(rawTicks, 1);
   var direction = (ticks < 0) ? 'zoomOut' : 'zoomIn';
 
   var pdfViewer = PDFViewerApplication.pdfViewer;
