@@ -7395,6 +7395,32 @@ function webViewerInitialized() {
     // gets trackpad-pinch-as-ctrl+wheel handled by handleMouseWheel above.
     var supportsGestureEvents = ('ongesturestart' in window);
 
+    // By default, every currentScale change triggers a full canvas
+    // re-render for every page -- fine for a single click on the zoom
+    // button, but far too slow to keep up with continuous pinch events,
+    // which is what caused the lag. During an active gesture we switch
+    // PDF.js into its built-in "CSS-only zoom" mode (a cheap CSS
+    // transform, no re-render), then switch back and force one real
+    // re-render once the gesture ends, so the final result is still crisp.
+    var previousUseOnlyCssZoom = null;
+
+    function beginFastZoom() {
+      previousUseOnlyCssZoom = PDFJS.useOnlyCssZoom;
+      PDFJS.useOnlyCssZoom = true;
+    }
+
+    function endFastZoom() {
+      if (previousUseOnlyCssZoom === null) {
+        return;
+      }
+      PDFJS.useOnlyCssZoom = previousUseOnlyCssZoom;
+      previousUseOnlyCssZoom = null;
+      // Re-apply the settled scale now that useOnlyCssZoom is back to
+      // normal, so PDF.js does one proper high-resolution re-render.
+      var pdfViewer = PDFViewerApplication.pdfViewer;
+      pdfViewer.currentScale = pdfViewer.currentScale;
+    }
+
     function clampScale(val) {
       return Math.max(PINCH_MIN_SCALE, Math.min(PINCH_MAX_SCALE, val));
     }
@@ -7405,6 +7431,7 @@ function webViewerInitialized() {
 
       container.addEventListener('gesturestart', function (e) {
         e.preventDefault();
+        beginFastZoom();
         gestureStartScale = PDFViewerApplication.pdfViewer.currentScale;
       });
 
@@ -7416,6 +7443,7 @@ function webViewerInitialized() {
 
       container.addEventListener('gestureend', function (e) {
         e.preventDefault();
+        endFastZoom();
       });
     } else {
       // --- Chrome / Firefox / Edge / Android touchscreens ---
@@ -7431,6 +7459,7 @@ function webViewerInitialized() {
       container.addEventListener('touchstart', function (e) {
         if (e.touches.length === 2) {
           e.preventDefault();
+          beginFastZoom();
           pinchStartDistance = getDistance(e.touches);
           pinchStartScale = PDFViewerApplication.pdfViewer.currentScale;
         }
@@ -7449,6 +7478,7 @@ function webViewerInitialized() {
         if (e.touches.length < 2) {
           pinchStartDistance = null;
           pinchStartScale = null;
+          endFastZoom();
         }
       });
     }
